@@ -524,18 +524,9 @@ class GBM: private GBMParams<S_t, K_t, r_t, sig_t, T_t, q_t>
             option.call = V_call[j] + (this->S - S[j]) * (V_call[j+1] - V_call[j]) / (S[j+1] - S[j]);
             option.put = V_put[j] + (this->S - S[j]) * (V_put[j+1] - V_put[j]) / (S[j+1] - S[j]);
             return option;
-
         }
     };
         
-
-template <typename S_t, typename K_t, typename r_t, typename sig_t, typename T_t, typename q_t>
-GBM(S_t, K_t, r_t, sig_t, T_t, q_t) -> GBM<S_t, K_t, r_t, sig_t, T_t, q_t>;
-
-template <typename S_t, typename K_t, typename r_t, typename sig_t, typename T_t>
-GBM(S_t, K_t, r_t, sig_t, T_t) -> GBM<S_t, K_t, r_t, sig_t, T_t>;
-
-
 int main()
 {
     GBM optionData {100.0, 100.0, 0.01, 0.3, 1.0, 0.1};
@@ -545,7 +536,7 @@ int main()
 */
     Options AFDM {optionData.finiteDifferencesCrankNicolson(10000, 10000, 4, true)};
 
-    /*
+/*
     std::cout << ABT.call << '\n';
     std::cout << ABT.put << '\n';
     std::cout << ATT.call << '\n';
