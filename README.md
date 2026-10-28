@@ -1,4 +1,4 @@
-# drift-lib
+# DriftLib
 ## Derivative Pricing
 Implemented
 European/American Options with continuous dividend yield
