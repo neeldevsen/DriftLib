@@ -198,7 +198,7 @@ class GBM: private GBMParams<S_t, K_t, r_t, sig_t, T_t, q_t>
             return option;
         }
 
-        Options<U,U> monteCarlo(const int N, bool av=false, const std::optional<unsigned int> seed=std::nullopt) const
+        Options<U,U> monteCarlo(const int N, bool av=false, bool cv=false, const std::optional<unsigned int> seed=std::nullopt) const
         {
             if (N <= 0)
             {
@@ -210,6 +210,17 @@ class GBM: private GBMParams<S_t, K_t, r_t, sig_t, T_t, q_t>
             }
 
             Options<U,U> option {};
+            U exp_rt {std::exp(-this->r * this->T)};
+
+            U sumY {};
+            U sumY2 {};
+
+            U sumXcall {};
+            U sumXYcall {};
+
+            U sumXput {};
+            U sumXYput {};
+
             std::mt19937 mt{seed ? *seed : std::random_device{}()};
             
             std::normal_distribution W {static_cast<U>(0), std::sqrt(this->T)};
@@ -219,24 +230,57 @@ class GBM: private GBMParams<S_t, K_t, r_t, sig_t, T_t, q_t>
                 U Z {W(mt)};
                 U S_final {this->S * std::exp((this->r -  this->q - static_cast<U>(0.5) * this->sig * this->sig) * this->T + (this->sig * Z))};
                 
+                
      
-                option.call += std::max(S_final - this->K, static_cast<U>(0));
-                option.put += std::max(this->K - S_final, static_cast<U>(0));
+                sumXcall += exp_rt * std::max(S_final - this->K, static_cast<U>(0));
+                sumXput += exp_rt * std::max(this->K - S_final, static_cast<U>(0));
 
+                if (cv)
+                {
+                    U X_call {exp_rt * std::max(S_final - this->K, static_cast<U>(0))};
+                    U X_put {exp_rt * std::max(this->K - S_final, static_cast<U>(0))};
+                    U Y {exp_rt * S_final};
+
+                    sumY += Y;
+                    sumY2 += std::pow(Y, static_cast<U>(2));
+
+                    sumXYcall += X_call * Y;
+                    sumXYput += X_put * Y;
+                }
 
                 if (av)
                 {
                     S_final = this->S * std::exp((this->r -  this->q - static_cast<U>(0.5) * this->sig * this->sig) * this->T - (this->sig * Z));
-                    option.call += std::max(S_final - this->K, static_cast<U>(0));
-                    option.put += std::max(this->K - S_final, static_cast<U>(0));
+                    U X_call {exp_rt * std::max(S_final - this->K, static_cast<U>(0))};
+                    sumXcall += X_call;
+                    U X_put {exp_rt * std::max(this->K - S_final, static_cast<U>(0))};
+                    sumXput += X_put;
+
+                    if (cv)
+                    {
+                        U Y {exp_rt * S_final};
+                        sumY += Y;
+                        sumY2 += std::pow(Y, static_cast<U>(2));
+                        sumXYcall += X_call * Y;
+                        sumXYput += X_put * Y;
+                    }
                 }
             }
 
-            option.call *= std::exp(-this->r * this->T) / static_cast<U>(N);
-            option.put *= std::exp(-this->r * this->T) / static_cast<U>(N);
-            return option;
+            sumXcall /= N;
+            sumXput /= N;
+            sumXYcall /= N;
+            sumXYput /= N;
+            sumY /= N;
+            sumY2 /= N;
             
-              
+            U covXYcall {sumXYcall - sumXcall * sumY};
+            U covXYput {sumXYput - sumXput * sumY};
+            U varY {sumY2 - std::pow(sumY, static_cast<U>(2))};
+
+            option.call = cv ? sumXcall - (covXYcall / varY) * (sumY - this->S*std::exp(-this->q*this->T)) : sumXcall;
+            option.put = cv ? sumXput - (covXYput / varY) * (sumY - this->S*std::exp(-this->q*this->T)) : sumXput;
+            return option;
         }
 
         Options<U,U> binomialTree(const int N, bool american=false) const
@@ -556,16 +600,24 @@ int main()
 {
     GBM optionData {100.0, 100.0, 0.01, 0.3, 1.0, 0.1};
 
-    Options ABT {optionData.monteCarlo(100001, true, 42)};
-    Options ATT {optionData.monteCarlo(10000, false, 42)};
+    Options BS {optionData.closedForm()};
+    Options ABT {optionData.monteCarlo(1000000, true, true, 42)};
+    Options ATT {optionData.monteCarlo(1000000, true, false, 42)};
+    Options ANT {optionData.monteCarlo(1000000, false, false, 42)};
+
 
      // Options AFDM {optionData.finiteDifferencesCrankNicolson(10000, 10000, 4, true)};
 
+    std::cout << std::setprecision(15);
 
-    std::cout << ABT.call << '\n';
-    std::cout << ABT.put << '\n';
-    std::cout << ATT.call << '\n';
-    std::cout << ATT.put << '\n';
+    std::cout << "Black Scholes Call: " << BS.call << '\n';
+    std::cout << "Black Scholes Put: "  << BS.put << '\n';
+    std::cout << "AV + CV Call: " << ABT.call << '\n';
+    std::cout << "AV + CV Put: "  << ABT.put << '\n';
+    std::cout << "AV Call: " << ATT.call << '\n';
+    std::cout << "AV Put: " << ATT.put << '\n';
+    std::cout << "None Call: " << ANT.call << '\n';
+    std::cout << "None Put: " << ANT.put << '\n';
 
  //   std::cout << AFDM.call << '\n';
   //  std::cout << AFDM.put << '\n';
